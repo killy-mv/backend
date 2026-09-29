@@ -1,4 +1,4 @@
-# Database — Core Mental Model 
+# Database
 
 Picks up directly from `server/README.md` §5: the server has no memory between
 requests, so state lives elsewhere. A database is the second row of that table —
