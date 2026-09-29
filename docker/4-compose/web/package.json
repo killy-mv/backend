@@ -1,0 +1,11 @@
+{
+  "name": "compose-counter",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}

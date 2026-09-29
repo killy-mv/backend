@@ -1,0 +1,22 @@
+# Two containers described in one file instead of two long `docker run` commands.
+#   docker compose up -d --build    build the web image and start both
+#   docker compose down -v          stop both and delete the data volume
+services:
+  web:
+    build: ./web                # build from web/Dockerfile instead of pulling
+    ports:
+      - "3021:3000"             # host 3021 -> container 3000
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis                   # start redis first
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes   # write data to disk
+    volumes:
+      - redisdata:/data         # ...and keep that disk outside the container
+    # no "ports": redis is reachable by web on the internal network only
+
+volumes:
+  redisdata:
