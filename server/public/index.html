@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>server examples</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Static file</h1>
+      <p>
+        This page came off disk. Whichever server you reached it through
+        (<code>:3000</code> express, <code>:8080</code> nginx,
+        <code>:8081</code> apache) sent the exact same bytes &mdash; it is the
+        same file mounted into all three.
+      </p>
+
+      <h2>Who served the API?</h2>
+      <p>The button below calls <code>/api/whoami</code>, which always lands on
+        express. If you are on 8080 or 8081, the request was proxied &mdash; look
+        for the <code>x-forwarded-for</code> header that the proxy added.</p>
+      <button id="go">GET /api/whoami</button>
+      <pre id="out">(not called yet)</pre>
+    </main>
+
+    <script>
+      const out = document.getElementById('out')
+      document.getElementById('go').addEventListener('click', async () => {
+        out.textContent = 'loading...'
+        try {
+          const res = await fetch('/api/whoami')
+          out.textContent = JSON.stringify(await res.json(), null, 2)
+        } catch (err) {
+          out.textContent =
+            'Request failed: ' + err.message +
+            '\n\nIs express running on :3000?'
+        }
+      })
+    </script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+# nginx as a reverse proxy in front of the express app.
+#
+#   browser :8080 --> nginx (container) --+--> static files off disk
+#                                         \--> /api/* proxied to express :3000 on the host
+#
+# Start express first (cd ../express && npm start), then: docker compose up
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: learn-nginx
+    ports:
+      # host:container. nginx listens on 80 inside; we publish it as 8080.
+      - "8080:80"
+    volumes:
+      # Our server block. Files in conf.d/ are pulled in by the image's main
+      # nginx.conf; default.conf is the one it ships, so we shadow it.
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # The same static folder express serves. Read-only: a web server has no
+      # business writing to its document root.
+      - ../public:/usr/share/nginx/html:ro
+    extra_hosts:
+      # Lets the container reach the host's :3000. Docker Desktop provides this
+      # name automatically; this line makes it work on plain Linux too.
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

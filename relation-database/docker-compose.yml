@@ -1,0 +1,82 @@
+# MySQL running as a container on your machine.
+#
+#   your app / mysql client
+#            |
+#            v
+#   127.0.0.1:3306 --> learn-mysql (the gatekeeper process)
+#                            |
+#                            v
+#                        ./data/  <- the actual files, right here in this folder.
+#                                    Outlives the container.
+#
+# Run from PowerShell in this folder:  docker compose up -d
+#
+# The two lines that matter most here are the volume and the "127.0.0.1:" prefix
+# on the port. See README.md §2 (files vs. process) and §7 (why you don't touch
+# the files yourself).
+
+services:
+  mysql:
+    # Pin the major version. The data directory format is tied to it, so you
+    # cannot swap this for mysql:9 later and expect the volume to still work.
+    # 8.4 is the current LTS.
+    image: mysql:8.4
+    container_name: learn-mysql
+
+    environment:
+      # These are read ONLY on first boot, when the data directory is empty.
+      # Change them later and nothing happens - the users already exist inside
+      # the volume. To truly reset, you must delete the volume (see README).
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: app
+      MYSQL_PASSWORD: apppw
+      # Real projects put these in a .env file that is gitignored. Plaintext is
+      # fine here because this database is only ever reachable from this laptop.
+
+    ports:
+      # host:container. Note the 127.0.0.1: prefix - it is not decoration.
+      #
+      # "3306:3306" would bind to 0.0.0.0, i.e. every network interface on the
+      # machine. Do that on a VPS and scanners find your MySQL within minutes.
+      # This form means: only processes on this machine can connect.
+      - "127.0.0.1:3306:3306"
+
+    volumes:
+      # THE line. A container's filesystem is destroyed with the container.
+      # Without this, `docker compose down` silently deletes your database.
+      #
+      # This is a BIND MOUNT: the host folder ./data (i.e.
+      # E:\code\learn\backend\relation-database\data) IS MySQL's data directory.
+      # Open it in Explorer after first boot and you are looking at the real
+      # pages, indexes and WAL from README §3 and §5. Look, don't edit - §7
+      # explains exactly how that goes wrong.
+      #
+      # Trade-off vs. a named volume (`dbdata:/var/lib/mysql`): visible and
+      # portable, but slower, because every write crosses the Windows/Linux
+      # filesystem boundary. Fine for learning; never do this in production.
+      - ./data:/var/lib/mysql
+
+      # Optional: any .sql or .sh file dropped in ./init/ is executed on FIRST
+      # boot only, against MYSQL_DATABASE. Handy for seeding practice tables.
+      # Uncomment once you have created the folder.
+      # - ./init:/docker-entrypoint-initdb.d:ro
+
+    # Bring the container back after a reboot or a crash, but stay down if you
+    # deliberately stopped it.
+    restart: unless-stopped
+
+    healthcheck:
+      # "Is the container running?" and "is MySQL accepting queries?" are
+      # different questions. First boot takes ~20-30s to initialise the data
+      # directory, during which the process is up but refuses connections.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+# No top-level `volumes:` block any more - a bind mount is just a host path, so
+# there is nothing for Docker to manage or name. Which also means `docker
+# compose down -v` will NOT wipe your data now. To reset, stop the container and
+# delete the ./data folder yourself.

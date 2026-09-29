@@ -1,0 +1,4 @@
+# MySQL's data directory, bind-mounted here by docker-compose.yml.
+# Binary, machine-specific, and hundreds of MB. Never commit a database's
+# files - if you want the data in git, commit a mysqldump instead.
+data/
