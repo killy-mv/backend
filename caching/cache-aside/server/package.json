@@ -1,0 +1,22 @@
+{
+  "name": "caching-cache-aside",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cache-aside demo - slow Postgres behind Redis (port 3010)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "stress": "node stress.js",
+    "stress:fast": "node stress.js --fast"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
+    "redis": "^6.2.1"
+  },
+  "devDependencies": {
+    "autocannon": "^8.0.0"
+  }
+}
