@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>JWT auth demo</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h2 { margin-top: 1.8rem; font-size: 1.1rem; }
+    pre { background: #f4f4f4; padding: .75rem; white-space: pre-wrap; word-break: break-all; }
+    button { margin: .2rem .2rem .2rem 0; }
+    input { width: 9rem; }
+    .note { color: #555; font-size: 14px; }
+    .h { color: #c0392b; } .p { color: #8e44ad; } .s { color: #2471a3; }
+  </style>
+</head>
+<body>
+  <h1>JWT</h1>
+  <p class="note">
+    Log in once and get a signed token that <em>contains</em> who you are. This page
+    attaches it as <code>Authorization: Bearer ...</code> and the server only checks the
+    signature, with no lookup. The access token lives for 60 seconds. A
+    refresh token in an <code>HttpOnly</code> cookie gets you a new one. See
+    <code>auth/README.md</code> §6.
+  </p>
+
+  <h2>1. Log in</h2>
+  <label>username <input id="username" value="ada"></label>
+  <label>password <input id="password" value="secret"></label>
+  <button id="login">POST /api/auth/login</button>
+
+  <h2>Your access token</h2>
+  <pre id="token">(none, not logged in)</pre>
+  <pre id="decoded">-</pre>
+  <p class="note">
+    Decoded right here in the browser, without the secret. Signed doesn't mean encrypted.
+    <span id="countdown"></span>
+  </p>
+
+  <h2>2. Use it</h2>
+  <button data-get="/api/me">GET /api/me</button>
+  <button data-get="/api/admin">GET /api/admin</button>
+  <button id="refresh">POST /api/auth/refresh</button>
+  <button id="logout">POST /api/auth/logout</button>
+  <p class="note">Wait for the countdown to hit 0 and call /api/me again, then refresh.</p>
+
+  <h2>3. Attack it</h2>
+  <button id="tamper">Edit payload to role=admin, keep signature</button>
+  <button id="alg-none">Forge an "alg": "none" token</button>
+  <button id="reuse">Reuse the token from before logout</button>
+  <p class="note">
+    The first two fail on the signature check. The third <em>works</em> until it expires:
+    logging out can't recall a token that's already out there.
+  </p>
+
+  <h2>4. Revocation (log in as ada)</h2>
+  <label>revoke user <input id="revoke-user" value="alan"></label>
+  <button id="revoke">POST /api/admin/revoke/:username</button>
+  <p class="note">
+    Kills alan's refresh tokens, but his current access token keeps working for up to 60s.
+    Compare with the session demo, where it's instant.
+  </p>
+
+  <h2>Request / response</h2>
+  <pre id="response">-</pre>
+
+  <script>
+    const $ = (id) => document.getElementById(id)
+
+    // In memory only, not localStorage: a variable disappears on reload, and
+    // at least it isn't sitting in storage for any injected script to find
+    // later (README §8). The HttpOnly refresh cookie restores it on reload.
+    let accessToken = null
+    let tokenBeforeLogout = null
+
+    const fromB64url = (s) =>
+      JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))))
+    const toB64url = (obj) =>
+      btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(obj))))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+    // Builds colored text with textContent, never innerHTML: token contents are data, not markup.
+    function paint(el, pieces) {
+      el.replaceChildren(...pieces.map(([cls, text]) =>
+        Object.assign(document.createElement('span'), { className: cls, textContent: text })))
+    }
+
+    function render() {
+      if (!accessToken) {
+        $('token').textContent = '(none, not logged in)'
+        $('decoded').textContent = '-'
+        return
+      }
+      const [h, p, s] = accessToken.split('.')
+      paint($('token'), [['h', h], ['', '.'], ['p', p], ['', '.'], ['s', s]])
+      paint($('decoded'), [
+        ['h', `header:  ${JSON.stringify(fromB64url(h))}\n`],
+        ['p', `payload: ${JSON.stringify(fromB64url(p), null, 2)}\n`],
+        ['s', 'signature: HMAC-SHA256(header.payload, server secret)'],
+      ])
+    }
+
+    setInterval(() => {
+      if (!accessToken) return ($('countdown').textContent = '')
+      const left = fromB64url(accessToken.split('.')[1]).exp - Math.floor(Date.now() / 1000)
+      $('countdown').textContent = left > 0 ? `Expires in ${left}s.` : 'EXPIRED. The server will reject it now.'
+    }, 250)
+
+    async function call(method, path, { body, token } = {}) {
+      const headers = {}
+      if (body) headers['Content-Type'] = 'application/json'
+      if (token) headers.Authorization = `Bearer ${token}`
+      const res = await fetch(path, { method, headers, body: body && JSON.stringify(body) })
+      const data = await res.json()
+      $('response').textContent =
+        `${method} ${path}\n` + Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n') +
+        `\n\n${res.status} ${res.statusText}\n\n` + JSON.stringify(data, null, 2)
+      return { ok: res.ok, data }
+    }
+
+    async function takeToken(result) {
+      if (result.ok) accessToken = result.data.accessToken
+      render()
+    }
+
+    $('login').onclick = async () =>
+      takeToken(await call('POST', '/api/auth/login', { body: { username: $('username').value, password: $('password').value } }))
+    $('refresh').onclick = async () => takeToken(await call('POST', '/api/auth/refresh'))
+    $('logout').onclick = async () => {
+      await call('POST', '/api/auth/logout')
+      tokenBeforeLogout = accessToken
+      accessToken = null
+      render()
+    }
+    for (const button of document.querySelectorAll('[data-get]')) {
+      button.onclick = () => call('GET', button.dataset.get, { token: accessToken })
+    }
+
+    $('tamper').onclick = () => {
+      if (!accessToken) return alert('log in first (as alan, to make it interesting)')
+      const [h, p, s] = accessToken.split('.')
+      const forged = `${h}.${toB64url({ ...fromB64url(p), role: 'admin' })}.${s}`
+      call('GET', '/api/admin', { token: forged })
+    }
+    $('alg-none').onclick = () => {
+      const now = Math.floor(Date.now() / 1000)
+      const forged = `${toB64url({ alg: 'none', typ: 'JWT' })}.${toB64url({ sub: 'ada', role: 'admin', exp: now + 3600 })}.`
+      call('GET', '/api/admin', { token: forged })
+    }
+    $('reuse').onclick = () => {
+      if (!tokenBeforeLogout) return alert('log in, then log out first')
+      call('GET', '/api/me', { token: tokenBeforeLogout })
+    }
+    $('revoke').onclick = () =>
+      call('POST', `/api/admin/revoke/${encodeURIComponent($('revoke-user').value)}`, { token: accessToken })
+
+    // After a reload the in-memory token is gone. The refresh cookie survived, so quietly get a new one.
+    call('POST', '/api/auth/refresh').then(takeToken)
+  </script>
+</body>
+</html>

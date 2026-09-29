@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Basic auth demo</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 780px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h2 { margin-top: 1.8rem; font-size: 1.1rem; }
+    pre { background: #f4f4f4; padding: .75rem; white-space: pre-wrap; word-break: break-all; }
+    button { margin: .2rem .2rem .2rem 0; }
+    input { width: 9rem; }
+    .note { color: #555; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Basic auth</h1>
+  <p class="note">
+    There's no login step. This page builds
+    <code>Authorization: Basic base64(username:password)</code> and sends it on
+    <em>every</em> request. Users are listed in <code>auth/credentials.txt</code>.
+    See <code>auth/README.md</code> §4.
+  </p>
+
+  <label>username <input id="username" value="ada"></label>
+  <label>password <input id="password" value="secret"></label>
+
+  <h2>1. Send the password with each request</h2>
+  <button data-path="/api/public">GET /api/public</button>
+  <button data-path="/api/me">GET /api/me</button>
+  <button data-path="/api/admin">GET /api/admin</button>
+  <p class="note">
+    Try <code>alan</code> / <code>enigma</code> on /api/admin to get 403 (known, not allowed),
+    and a wrong password to get 401 (unknown). Watch the server log: every click
+    runs the slow password hash again.
+  </p>
+
+  <h2>2. Send no header</h2>
+  <button id="no-header">GET /api/me with no Authorization header</button>
+
+  <h2>3. Let the browser do it</h2>
+  <p class="note">
+    <a href="/api/me">Open /api/me as a navigation</a>. The server answers 401 +
+    <code>WWW-Authenticate</code>, and the browser shows its own login popup. Log in, come
+    back, and click step 2 again: now it works, because the browser caches the
+    credentials and adds the header itself. There's no logout button. The only
+    way out is to close the browser.
+  </p>
+
+  <h2>Request (as built by this page)</h2>
+  <pre id="request">-</pre>
+  <h2>Response</h2>
+  <pre id="response">-</pre>
+
+  <script>
+    const $ = (id) => document.getElementById(id)
+
+    // btoa() only handles Latin-1, so encode to UTF-8 bytes first.
+    function basicHeader(username, password) {
+      const bytes = new TextEncoder().encode(`${username}:${password}`)
+      return 'Basic ' + btoa(String.fromCharCode(...bytes))
+    }
+
+    async function call(path, headers = {}) {
+      // Tells our server to skip WWW-Authenticate, so a 401 lands here instead
+      // of triggering the browser popup.
+      headers = { 'X-Requested-With': 'fetch', ...headers }
+      $('request').textContent =
+        `GET ${path}\n` + Object.entries(headers).map(([k, v]) => `${k}: ${v}`).join('\n')
+      const res = await fetch(path, { headers })
+      $('response').textContent =
+        `${res.status} ${res.statusText}\n\n` + JSON.stringify(await res.json(), null, 2)
+    }
+
+    for (const button of document.querySelectorAll('[data-path]')) {
+      button.onclick = () =>
+        call(button.dataset.path, { Authorization: basicHeader($('username').value, $('password').value) })
+    }
+    $('no-header').onclick = () => call('/api/me')
+  </script>
+</body>
+</html>
