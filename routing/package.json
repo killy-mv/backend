@@ -1,0 +1,13 @@
+{
+  "name": "routing",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hand-written router on node:http, no dependencies (port 3004)",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "demo": "node demo.mjs"
+  }
+}
