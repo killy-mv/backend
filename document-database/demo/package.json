@@ -1,0 +1,18 @@
+{
+  "name": "document-database-demo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MongoDB lessons: documents, modeling, indexes, aggregation, transactions",
+  "scripts": {
+    "documents": "node 01-documents.js",
+    "modeling": "node 02-modeling.js",
+    "indexes": "node 03-indexes.js",
+    "aggregation": "node 04-aggregation.js",
+    "transactions": "node 05-transactions.js",
+    "all": "node 01-documents.js && node 02-modeling.js && node 03-indexes.js && node 04-aggregation.js && node 05-transactions.js"
+  },
+  "dependencies": {
+    "mongodb": "^7.7.0"
+  }
+}

@@ -1,0 +1,50 @@
+# MongoDB running as a container on your machine.
+#
+#   demo/*.js  (mongodb driver)
+#        |
+#        v
+#   127.0.0.1:27017 --> learn-mongo (mongod, a one-member replica set "rs0")
+#                            |
+#                            v
+#                        mongodata  <- named Docker volume, outlives the container
+#
+# Run from PowerShell in this folder:  docker compose up -d
+# Wait until `docker compose ps` says (healthy), then run the lessons in demo/.
+
+services:
+  mongo:
+    # Pin the major version. Like any database, the on-disk format is tied to it.
+    image: mongo:8.0
+    container_name: learn-mongo
+
+    # Why a replica set with only one member? Multi-document transactions
+    # (lesson 5) only work on a replica set, never on a lone mongod. Real
+    # deployments run 3 members. One is enough to switch the feature on.
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+
+    ports:
+      # Only processes on this machine can connect (same reasoning as
+      # relation-database/docker-compose.yml). There is no password, so this
+      # 127.0.0.1: prefix is the only thing keeping it private.
+      - "127.0.0.1:27017:27017"
+
+    volumes:
+      - mongodata:/data/db
+
+    healthcheck:
+      # Doubles as the one-time setup: on the first check the replica set
+      # doesn't exist yet, so rs.status() throws and we create it. Every
+      # check after that just confirms it's up.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  mongodata:
